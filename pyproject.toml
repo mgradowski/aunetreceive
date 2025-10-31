@@ -1,19 +1,24 @@
 [project]
 name = "aunetreceive"
-version = "0.1.0"
-description = "Add your description here"
+description = "Simple pure-Python receiver for Apple's AUNetSend."
 readme = "README.md"
 authors = [
     { name = "Mikołaj Gradowski", email = "hello@mgradow.ski" }
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "pyalsaaudio>=0.11.0 ; sys_platform == 'linux'",
     "zeroconf>=0.148.0",
 ]
+dynamic=["version"]
 
 [project.scripts]
 aunetreceive = 'aunetreceive.__main__:main'
 
 [build-system]
-requires = ["uv_build>=0.9.5,<0.10.0"]
-build-backend = "uv_build"
+requires = ["hatchling>=1.27.0,<1.28.0", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+

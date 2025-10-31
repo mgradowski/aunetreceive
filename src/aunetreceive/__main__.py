@@ -3,14 +3,14 @@ import ipaddress
 import logging
 import sys
 from argparse import ArgumentParser
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import nullcontext
-from pathlib import Path
 from typing import TypedDict, cast
 
 from zeroconf.asyncio import AsyncZeroconf
 
-from aunetreceive import (
+import alsaaudio
+
+from ._play import play_forever
+from ._receive import (
     DEFAULT_AUNETSEND_PORT,
     receive_forever,
 )
@@ -18,17 +18,19 @@ from aunetreceive import (
 BONJOUR_SERVICE_TYPE: str = "_apple-ausend._tcp.local."
 DEFAULT_AUNETSEND_BONJOUR_NAME: str = "AUNetSend"
 
+
 _log = logging.getLogger(__name__)
 
 
 class _Args(TypedDict):
-    outfile: Path | None
     host: str | None
     port: int | None
     bonjour_name: str | None
+    period_size: int
+    n_periods: int
 
 
-async def amain() -> None:
+async def _amain() -> None:
     logging.basicConfig(
         stream=sys.stderr,
         format="[{asctime}] [{levelname:.1s}:{name}] {message}",
@@ -54,8 +56,22 @@ async def amain() -> None:
         "-B",
         "--bonjour-name",
         type=str,
+        help="AUNetSend Bonjour name for automatic host and port resolution.",
     )
-    _ = argparser.add_argument("outfile", type=Path, nargs="?")
+    _ = argparser.add_argument(
+        "-s",
+        "--period-size",
+        type=int,
+        default=64,
+        help="Number of frames in an ALSA period.",
+    )
+    _ = argparser.add_argument(
+        "-n",
+        "--n-periods",
+        type=int,
+        default=64,
+        help="Number of periods in the ALSA buffer.",
+    )
     args = cast(_Args, cast(object, vars(argparser.parse_args())))
 
     host: str
@@ -89,26 +105,25 @@ async def amain() -> None:
             _log.info("using default port %d", DEFAULT_AUNETSEND_PORT)
             port = DEFAULT_AUNETSEND_PORT
 
-    outfile_contextmanager = (
-        open(args["outfile"], mode="ab")
-        if args["outfile"] is not None
-        else nullcontext(sys.stdout.buffer)
+    device = alsaaudio.PCM(
+        device="plughw:3,0",
+        channels=2,
+        rate=48000,
+        format=alsaaudio.PCM_FORMAT_S16_LE,
+        periodsize=args["period_size"],
+        periods=args["n_periods"],
     )
 
     async with asyncio.TaskGroup() as tg:
-        with ThreadPoolExecutor(1) as pool, outfile_contextmanager as f:
-            loop = asyncio.get_running_loop()
-            chunks: asyncio.Queue[bytes] = asyncio.Queue(maxsize=1)
-            receive_task = tg.create_task(  # pyright: ignore[reportUnusedVariable]  # noqa: F841
-                receive_forever(chunks, host, port),
-            )
-            while True:
-                chunk = await chunks.get()
-                _ = await loop.run_in_executor(pool, f.write, chunk)
+        chunks: asyncio.Queue[bytes] = asyncio.Queue()
+        receive = tg.create_task(  # pyright: ignore[reportUnusedVariable]  # noqa: F841
+            receive_forever(chunks, host, port),
+        )
+        play = tg.create_task(play_forever(chunks, device))  # pyright: ignore[reportUnusedVariable]  # noqa: F841
 
 
 def main() -> None:
-    asyncio.run(amain())
+    asyncio.run(_amain())
 
 
 if __name__ == "__main__":
