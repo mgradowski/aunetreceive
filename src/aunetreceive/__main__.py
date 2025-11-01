@@ -28,6 +28,7 @@ class _Args(TypedDict):
     bonjour_name: str | None
     period_size: int
     n_periods: int
+    device: str
 
 
 async def _amain() -> None:
@@ -72,6 +73,13 @@ async def _amain() -> None:
         default=64,
         help="Number of periods in the ALSA buffer.",
     )
+    _ = argparser.add_argument(
+        "-D",
+        "--device",
+        type=str,
+        default="default",
+        help="Name of ALSA device to use for playback, e.g. 'plughw:2,0'.",
+    )
     args = cast(_Args, cast(object, vars(argparser.parse_args())))
 
     host: str
@@ -106,7 +114,7 @@ async def _amain() -> None:
             port = DEFAULT_AUNETSEND_PORT
 
     device = alsaaudio.PCM(
-        device="plughw:3,0",
+        device=args["device"],
         channels=2,
         rate=48000,
         format=alsaaudio.PCM_FORMAT_S16_LE,

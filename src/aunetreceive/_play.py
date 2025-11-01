@@ -1,5 +1,6 @@
 import asyncio
 from collections.abc import AsyncIterator
+from logging import getLogger
 from random import random
 from typing import Callable, Never
 
@@ -7,8 +8,9 @@ import alsaaudio
 
 _PERIODSIZE = 64
 _PERIODS = 96
-_AVAIL_TARGET = (_PERIODSIZE * _PERIODS) // 2
 FRAMESIZE = 4
+
+_log = getLogger(__name__)
 
 
 async def _unpack_frames(
@@ -58,7 +60,7 @@ async def _pack_frames(
 async def play_forever(
     chunks: asyncio.Queue[bytes],
     device: alsaaudio.PCM,
-    momentum: float = 5e-4,
+    momentum: float = 1e-2,
     sensitivity: float = 1e-5,
 ) -> Never:
     """Play `chunks` on `device`, while adding and/or removing single frames to maintain
@@ -71,10 +73,15 @@ async def play_forever(
     playback_periods = _pack_frames(frames_corrected, _PERIODSIZE)
 
     async for period in playback_periods:
-        avail = device.avail()
-        device.write(period)
+        while not device.avail():
+            await asyncio.sleep(0)
 
-        err = avail - chunks.qsize() * (1024 // FRAMESIZE) - _AVAIL_TARGET
+        device.write(period)
+        avail = device.avail()
+
+        err = avail - chunks.qsize() * (1024 // FRAMESIZE)
         speed = momentum * -err * sensitivity + (1.0 - momentum) * speed
+
+        _log.info(f"{avail=:>6d} {chunks.qsize()=:>3d} {err=:>6d} {speed=:0.5f}")
 
     assert False
