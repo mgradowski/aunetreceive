@@ -82,6 +82,6 @@ async def play_forever(
         err = avail - chunks.qsize() * (1024 // FRAMESIZE)
         speed = momentum * -err * sensitivity + (1.0 - momentum) * speed
 
-        _log.info(f"{avail=:>6d} {chunks.qsize()=:>3d} {err=:>6d} {speed=:0.5f}")
+        # _log.info(f"{avail=:>6d} {chunks.qsize()=:>3d} {err=:>6d} {speed=:0.5f}")
 
     assert False
